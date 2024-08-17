@@ -1,0 +1,322 @@
+https://www.youtube.com/watch?v=OzUzrs8uJl8
+
+FARM Stack - FastAPI, React, MongoDB
+
+mongodb  "Start free"
+
+install MongoDB community edition, MongoDB Compass, Mongo Shell
+
+mkdir farm-stack/backend
+cd farm-stack/backend
+
+fastapi ver 0.65.1
+asynchronous framework which heavily depends on async await syntax
+
+uvicorn ver 0.14.0
+ASGI server
+
+motor ver 2.4.0
+full featuring non blocking MongoDB driver,
+working for Python in general and for FastAPI
+
+> pip install pipenv 
+
+> pipenv shell
+
+> pipenv install -r requirements.txt
+
+main.py, database.py, model.py
+
+main.py:
+
+from fastapi import FastAPI
+
+If Python cannot find the package, Ctrl-Shift-P => Python: Select Interpreter
+
+main.py:
+from fastapi.middleware.cors import CORSMiddleware
+
+CORS - Cross Origin Resource Share
+
+main.py:
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+#App object
+app = FastAPI()
+
+origins = ['https://localhost:3000']
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins = origins,
+    allow_credentials = True,
+    allow_methods = ["*"],
+    allow_headers = ["*"]
+)
+
+@app.get("/")
+def read_root():
+    return {"Ping":"Pong"}
+
+> export PATH = /c/Users/natal/.virtualenvs/backend-WjhOPUfy/Scripts:$PATH
+
+> uvicorn main:app --reload
+
+Connect browser to http://127.0.0.1:8000 and see {"Ping":"Pong"}
+
+Use http://127.0.0.1:8000/docs - it looks great 
+
+main.py: add
+
+@app.get("/api/todo")
+async def get_todo():
+    return 1
+
+@app.get("/api/todo{id}")
+async def get_todo_by_id(id):
+    return 1
+
+@app.post("/api/todo")
+async def post_todo(todo):
+    return 1
+
+@app.put("/api/todo{id}")
+async def put_todo(id, data):
+    return 1
+
+@app.delete("/api/todo{id}")
+async def delete_todo(id):
+    return 1
+
+model.py
+
+pydantic helps to create JSON schemas from the model
+
+from pydantic import BaseModel
+
+class Todo(BaseModel):
+    title: str
+    description: str
+
+database.py
+
+from model import Todo
+
+#MongoDB driver
+import motor.motor_asyncio
+
+client = motor.motor_asyncio.AsyncIOMotorClient('mongodb://localhost:27017/')
+
+database = client.TodoList
+
+collection = database.todo
+
+async def fetch_one_todo(title):
+    document = await collection.find_one({"title":title})
+    return document
+
+async def fetch_all_todos():
+    todos = []
+    cursor = collection.find({})
+    async for document in cursor:
+        todos.append(Todo(**document))
+    return todos
+
+async def create_todo(todo):
+    document = todo
+    result = await collection.insert_one(document)
+    return document
+
+async def update_todo(title, desc):
+    await collection.update_one({"title":title},{"$set":{
+        "description":desc
+        }})
+    document = await collection.find_one({"title":title})
+    return document
+
+async def remove_todo(title):
+    await collection.delete_one({"title":title})
+    return True
+
+
+main.py
+
+from turtle import up
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+#App object
+app = FastAPI()
+
+from model import Todo
+
+from database import (
+    fetch_one_todo,
+    fetch_all_todos,
+    create_todo,
+    update_todo,
+    remove_todo
+)
+
+origins = ['https://localhost:3000']
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins = origins,
+    allow_credentials = True,
+    allow_methods = ["*"],
+    allow_headers = ["*"]
+)
+
+@app.get("/")
+def read_root():
+    return {"Ping":"Pong"}
+
+@app.get("/api/todo")
+async def get_todo():
+    response = await fetch_all_todos()
+    return response
+
+@app.get("/api/todo{title}", response_model = Todo)
+async def get_todo_by_id(title):
+    response = await fetch_one_todo(title)
+    if response:
+        return response
+    raise HTTPException(404, f"There is no TODO item with title {title}" )
+
+@app.post("/api/todo", response_model = Todo)
+async def post_todo(todo:Todo):
+    response = await create_todo(todo.dict())
+    if response:
+        return response
+    return HTTPException(400, "Something went wrong / Bad request")
+
+@app.put("/api/todo{title}", response_model = Todo)
+async def put_todo(title:str, desc:str):
+    response = await update_todo(title, desc)
+    if response:
+        return response
+    raise HTTPException(404, f"There is no TODO item with title {title}" )
+
+@app.delete("/api/todo{title}")
+async def delete_todo(title):
+    response = await remove_todo(title)
+    if response:
+        return f"Successfully deleted TODO item {title} !"
+    raise HTTPException(404, f"There is no TODO item with title {title}" )
+
+
+
+
+
+
+
+Now we can at http://localhost:8000/docs#/default/post_todo_api_todo_post
+perform "post" for example and add "todo" to the collection todos of the db TodoList
+
+> cd farm-stack
+> npx create-react-app frontend
+
+> cd frontend
+> npm install axios bootstrap
+
+> npm start
+Open the frontend with vs code 
+
+Add to index.js:
+
+import '../node_modules/bootstrap/dist/css/bootstrap.min.css';
+
+remove the insides of <div className="App"> in App.js 
+and remove import of logo
+
+App.css:
+
+.App {
+  text-align: center;
+  padding: 0;
+  margin: 0;
+}
+
+App.jsx: 
+
+import {useState, useEffect} from 'react';
+import axios from 'axios';
+import './App.css';
+
+
+function App() {
+
+  const [todoList, setTodoList] = useState([{}]);
+  const [title, setTitle] = useState("");
+  const [desc, setDesc] = useState("");
+
+  // Read all todos
+
+  useEffect(() => {
+
+    axios.get('http://localhost:8000/api/todo')
+      .then(res => {
+        setTodoList(res.data)
+      })
+
+  })
+
+  // Post a todo
+
+  const addTodoHandler = () => {
+
+    axios.post('http://localhost:8000/api/todo', {'title':title,'description':desc})
+    .then(res => console.log(res))
+  }
+
+  return (
+    <div className="App list-group-item justify-content-center align-items-center mx-auto" style={{width: "400px",
+                              backgroundColor: "white",
+                                    marginTop: "15px"}}>
+        <h1 className="card bg-primary text-white mb-1"
+            styleName="maxWidth: 20rem">Task Manager</h1>
+        <h6 className="card bg-primary text-white mb-3">
+          FastAPI - React - MongoDB</h6>
+        <div className="card-body">
+            <h5 className="card bg-dark text-white mb-3">
+              Add Your Task</h5>
+            <span className="card-text">
+                <input className="mb-2 form-control titleIn" 
+                       placeholder="Title" 
+                       onChange={e=>setTitle(e.target.value)}/>
+                <input className="mb-2 form-control descIn" 
+                       placeholder="Description" 
+                       onChange={e=>setDesc(e.target.value)}/>
+                <button className="btn btn-outline-primary mx-2 mb-3"
+                        style={{borderRadius: "50px", fontWeight: "bold"}}
+                        onClick={addTodoHandler}>
+                  Add Task</button>
+            </span>
+
+            <h5 className="card bg-dark text-white mb-3">
+              Your Tasks</h5>
+
+            <div>
+              {/* Todo items - external component */}
+            </div>
+        </div>
+        <h6 className="card text-dark bg-warning py-1 mb-0">
+          Copyright 2021, All rights reserved &copy;
+        </h6>
+    </div>
+  );
+}
+
+export default App;
+
+src/components/Todo.jsx
+
+
+
+
+
+
+
